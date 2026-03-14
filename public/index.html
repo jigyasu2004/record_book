@@ -40,6 +40,10 @@
           <span class="theme-label-dark">Light</span>
           <span class="theme-label-light" style="display:none">Dark</span>
         </button>
+        <div class="user-info" id="user-info" style="display:none">
+          <span class="user-name" id="username-display"></span>
+          <button id="logout-btn" class="btn btn-ghost btn-sm">Sign out</button>
+        </div>
         <button id="add-date-btn" class="btn btn-primary">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Add Date
@@ -68,6 +72,20 @@
     <div class="summary-item">
       <span class="summary-label">Dates Completed</span>
       <span class="summary-value" id="sum-complete">0 / 0</span>
+    </div>
+  </div>
+
+  <!-- ── Filter bar ──────────────────────────────────────────────── -->
+  <div class="filter-bar" id="filter-bar">
+    <div class="filter-inner">
+      <span class="filter-label">Filter:</span>
+      <div class="filter-chips" id="filter-chips">
+        <button class="filter-chip active" data-mode="all">All Time</button>
+        <button class="filter-chip" data-mode="month">Month</button>
+        <button class="filter-chip" data-mode="range">Date Range</button>
+      </div>
+      <div class="filter-controls" id="filter-controls"></div>
+      <span class="filter-result" id="filter-result"></span>
     </div>
   </div>
 
