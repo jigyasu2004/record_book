@@ -40,9 +40,14 @@ function fmtINR(v) {
 }
 function fmtDate(str) {
   if (!str) return '';
-  const [y, m, d] = str.split('-');
-  return new Date(+y, +m - 1, +d)
-    .toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  // Slice to 10 chars so both "2026-03-14" and "2026-03-14T00:00:00.000Z" work
+  const s = String(str).slice(0, 10);
+  const [y, m, d] = s.split('-');
+  if (!y || !m || !d) return String(str);
+  const dt = new Date(+y, +m - 1, +d);
+  if (isNaN(dt.getTime())) return String(str);
+  // en-GB gives day-first: "Saturday, 14 March 2026"
+  return dt.toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 }
 function esc(s) {
   return String(s ?? '')
@@ -490,18 +495,16 @@ async function addDate() {
   const date   = picker.value;
   if (!date) { err.textContent = 'Please select a date.'; err.classList.remove('hidden'); return; }
   try {
-    await api('POST', '/api/records', { date });
-    const fresh = await api('GET', '/api/data');
-    state.records = fresh.records;
+    const record = await api('POST', '/api/records', { date });
+    // Insert into local state in sorted order — avoids a second GET round-trip
+    state.records.push(record);
+    state.records.sort((a, b) => String(a.date).localeCompare(String(b.date)));
     render();
     closeModal();
     showToast(`Added: ${fmtDate(date)}`);
     setTimeout(() => {
-      const newRecord = state.records.find(r => r.date === date);
-      if (newRecord) {
-        const el = document.querySelector(`.date-section[data-record-id="${newRecord.id}"]`);
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
+      const el = document.querySelector(`.date-section[data-record-id="${record.id}"]`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 150);
   } catch (e) {
     err.textContent = e.message;
