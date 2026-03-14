@@ -40,14 +40,15 @@ function fmtINR(v) {
 }
 function fmtDate(str) {
   if (!str) return '';
-  // Slice to 10 chars so both "2026-03-14" and "2026-03-14T00:00:00.000Z" work
-  const s = String(str).slice(0, 10);
-  const [y, m, d] = s.split('-');
-  if (!y || !m || !d) return String(str);
-  const dt = new Date(+y, +m - 1, +d);
+  // Regex extract so "2026-03-28" and "2026-03-28T00:00:00.000Z" both work
+  const match = String(str).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return String(str);
+  const [, y, m, d] = match;
+  const dt = new Date(+y, +m - 1, +d); // local midnight — no timezone shift
   if (isNaN(dt.getTime())) return String(str);
-  // en-GB gives day-first: "Saturday, 14 March 2026"
-  return dt.toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  // Shows as: "Saturday, 28/03/2026"
+  const weekday = dt.toLocaleDateString('en-GB', { weekday: 'long' });
+  return `${weekday}, ${d}/${m}/${y}`;
 }
 function esc(s) {
   return String(s ?? '')
@@ -479,7 +480,12 @@ function openModal() {
   const picker  = document.getElementById('date-picker');
   const err     = document.getElementById('modal-error');
   overlay.classList.remove('hidden');
-  picker.value = new Date().toISOString().split('T')[0];
+  // Use LOCAL date — toISOString() is UTC and shows wrong date in IST after midnight
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  picker.value = `${y}-${m}-${d}`;
   err.classList.add('hidden');
   err.textContent = '';
   picker.focus();
