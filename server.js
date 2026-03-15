@@ -97,7 +97,9 @@ async function getAllData(userId) {
   }
 
   const { rows: records } = await pool.query(
-    'SELECT * FROM date_records WHERE user_id = $1 ORDER BY date ASC', [userId]
+    `SELECT id, user_id, date::TEXT AS date, created_at
+     FROM date_records WHERE user_id = $1 ORDER BY date ASC`,
+    [userId]
   );
   const { rows: allChallenges } = await pool.query(
     `SELECT c.* FROM challenges c
@@ -107,6 +109,10 @@ async function getAllData(userId) {
     [userId]
   );
   records.forEach(r => {
+    // Always normalize to bare YYYY-MM-DD string — guards against pg
+    // returning a Date object (which JSON-serializes as UTC ISO string,
+    // shifting the date by -1 in IST / UTC+5:30)
+    r.date = String(r.date).substring(0, 10);
     r.challenges = allChallenges.filter(c => c.date_record_id === r.id);
   });
   return { settings, records };
@@ -209,7 +215,8 @@ app.post('/api/records', requireAuth, async (req, res) => {
     const { date } = req.body;
     if (!date) return res.status(400).json({ error: 'Date is required' });
     const { rows } = await pool.query(
-      'INSERT INTO date_records (user_id, date) VALUES ($1, $2) RETURNING *',
+      `INSERT INTO date_records (user_id, date) VALUES ($1, $2)
+       RETURNING id, user_id, date::TEXT AS date, created_at`,
       [req.userId, date]
     );
     const record = rows[0];

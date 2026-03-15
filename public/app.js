@@ -276,12 +276,12 @@ function render() {
 
 /* ── Re-render one date section ─────────────────────────────────── */
 function rerenderSection(recordId) {
-  const record   = state.records.find(r => r.id === recordId);
+  const record   = state.records.find(r => String(r.id) === String(recordId));
   if (!record) return;
 
   // If this record is filtered out, don't try to render it
   const filtered = getFilteredRecords();
-  if (!filtered.find(r => r.id === recordId)) {
+  if (!filtered.find(r => String(r.id) === String(recordId))) {
     updateSummary();
     updateGrandTotal();
     return;
@@ -421,7 +421,7 @@ function showToastUndo(msg) {
 
 /* ── Clear sources with undo ────────────────────────────────────── */
 async function initiateClearSources(recordId) {
-  const record = state.records.find(r => r.id === recordId);
+  const record = state.records.find(r => String(r.id) === String(recordId));
   if (!record || record.challenges.length === 0) return;
 
   const clearedChallenges = [...record.challenges];
@@ -441,7 +441,7 @@ async function initiateClearSources(recordId) {
   // Store in pending (2-min window to undo by re-inserting)
   const timer = setTimeout(() => {
     delete pendingClears[recordId];
-    const r = state.records.find(r => r.id === recordId);
+    const r = state.records.find(r => String(r.id) === String(recordId));
     if (r) rerenderSection(recordId);
   }, 2 * 60 * 1000);
   pendingClears[recordId] = { challenges: clearedChallenges, timer };
@@ -463,8 +463,8 @@ async function undoClearSources(recordId) {
     const data = await api('POST', `/api/records/${recordId}/challenges/restore`, {
       challenges: pending.challenges
     });
-    const record = state.records.find(r => r.id === recordId);
-    if (record) record.challenges = data.challenges;
+    const record = state.records.find(r => String(r.id) === String(recordId));
+    if (record) record.challenges = data.challenges.map(c => ({ ...c, id: +c.id }));
     delete pendingClears[recordId];
     rerenderSection(recordId);
     showToast('Sources restored!');
@@ -502,9 +502,11 @@ async function addDate() {
   if (!date) { err.textContent = 'Please select a date.'; err.classList.remove('hidden'); return; }
   try {
     const record = await api('POST', '/api/records', { date });
+    record.id   = +record.id;
+    record.date = String(record.date).substring(0, 10);
     // Insert into local state in sorted order — avoids a second GET round-trip
     state.records.push(record);
-    state.records.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    state.records.sort((a, b) => (a.date > b.date) - (a.date < b.date));
     render();
     closeModal();
     showToast(`Added: ${fmtDate(date)}`);
@@ -530,7 +532,7 @@ async function deleteDate(recordId) {
 
   try {
     await api('DELETE', `/api/records/${recordId}`);
-    state.records = state.records.filter(r => r.id !== recordId);
+    state.records = state.records.filter(r => String(r.id) !== String(recordId));
     document.querySelector(`.date-section[data-record-id="${recordId}"]`)?.remove();
     if (state.records.length === 0) render();
     updateSummary();
@@ -541,10 +543,14 @@ async function deleteDate(recordId) {
 
 /* ── Add challenge ──────────────────────────────────────────────── */
 async function addChallenge(recordId) {
-  const record = state.records.find(r => r.id === recordId);
-  if (!record) return;
+  const record = state.records.find(r => String(r.id) === String(recordId));
+  if (!record) {
+    showToast('Could not find record — try refreshing the page.', 'error');
+    return;
+  }
   try {
     const challenge = await api('POST', `/api/records/${recordId}/challenges`, {});
+    challenge.id = +challenge.id;
     record.challenges.push(challenge);
     rerenderSection(recordId);
     showToast('Source added.');
@@ -556,8 +562,8 @@ async function deleteChallenge(challengeId, recordId) {
   if (!confirm('Remove this source?')) return;
   try {
     await api('DELETE', `/api/challenges/${challengeId}`);
-    const record = state.records.find(r => r.id === recordId);
-    if (record) record.challenges = record.challenges.filter(c => c.id !== challengeId);
+    const record = state.records.find(r => String(r.id) === String(recordId));
+    if (record) record.challenges = record.challenges.filter(c => String(c.id) !== String(challengeId));
     rerenderSection(recordId);
     showToast('Source removed.');
   } catch (e) { showToast(e.message, 'error'); }
@@ -571,8 +577,8 @@ function scheduleSave(challengeId) {
 }
 
 async function saveChallengeToServer(challengeId) {
-  const record    = state.records.find(r => r.challenges.some(c => c.id === challengeId));
-  const challenge = record?.challenges.find(c => c.id === challengeId);
+  const record    = state.records.find(r => r.challenges.some(c => String(c.id) === String(challengeId)));
+  const challenge = record?.challenges.find(c => String(c.id) === String(challengeId));
   if (!challenge) return;
   try {
     await api('PATCH', `/api/challenges/${challengeId}`, {
@@ -832,8 +838,8 @@ function attachEvents() {
     const rawVal      = input.value.trim();
     const numVal      = rawVal === '' ? null : parseFloat(rawVal);
 
-    const record    = state.records.find(r => r.id === recordId);
-    const challenge = record?.challenges.find(c => c.id === challengeId);
+    const record    = state.records.find(r => String(r.id) === String(recordId));
+    const challenge = record?.challenges.find(c => String(c.id) === String(challengeId));
     if (!challenge) return;
 
     challenge[field] = numVal;
@@ -851,8 +857,8 @@ function attachEvents() {
     const input = e.target;
     if (!input.classList.contains('challenge-name-input')) return;
     const challengeId = +input.dataset.challengeId;
-    const record    = state.records.find(r => r.challenges.some(c => c.id === challengeId));
-    const challenge = record?.challenges.find(c => c.id === challengeId);
+    const record    = state.records.find(r => r.challenges.some(c => String(c.id) === String(challengeId)));
+    const challenge = record?.challenges.find(c => String(c.id) === String(challengeId));
     if (!challenge) return;
     challenge.name = input.value;
     scheduleSave(challengeId);
@@ -863,8 +869,8 @@ function attachEvents() {
     const input = e.target;
     if (!input.classList.contains('challenge-link-input')) return;
     const challengeId = +input.dataset.challengeId;
-    const record    = state.records.find(r => r.challenges.some(c => c.id === challengeId));
-    const challenge = record?.challenges.find(c => c.id === challengeId);
+    const record    = state.records.find(r => r.challenges.some(c => String(c.id) === String(challengeId)));
+    const challenge = record?.challenges.find(c => String(c.id) === String(challengeId));
     if (!challenge) return;
     const linkVal = input.value.trim() || null;
     challenge.link = linkVal;
@@ -907,6 +913,11 @@ async function init() {
     const data = await api('GET', '/api/data');
     state.settings = data.settings;
     state.records  = data.records;
+    // Normalize IDs to numbers so === comparisons always work
+    state.records.forEach(r => {
+      r.id = +r.id;
+      r.challenges.forEach(c => { c.id = +c.id; });
+    });
 
     document.getElementById('usd-rate-input').value = state.settings.usd_rate ?? 92.54;
 
