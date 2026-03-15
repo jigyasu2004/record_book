@@ -25,6 +25,7 @@ async function api(method, path, body) {
   if (body !== undefined) opts.body = JSON.stringify(body);
   const res  = await fetch(path, opts);
   const data = await res.json();
+  if (res.status === 401) { window.location.replace('/login.html'); return; }
   if (!res.ok) throw new Error(data.error || 'Request failed');
   return data;
 }
@@ -424,6 +425,8 @@ async function initiateClearSources(recordId) {
   const record = state.records.find(r => String(r.id) === String(recordId));
   if (!record || record.challenges.length === 0) return;
 
+  if (!confirm(`Clear all ${record.challenges.length} source${record.challenges.length !== 1 ? 's' : ''} for this date?`)) return;
+
   const clearedChallenges = [...record.challenges];
   const cnt = clearedChallenges.length;
 
@@ -464,7 +467,13 @@ async function undoClearSources(recordId) {
       challenges: pending.challenges
     });
     const record = state.records.find(r => String(r.id) === String(recordId));
-    if (record) record.challenges = data.challenges.map(c => ({ ...c, id: +c.id }));
+    if (record) record.challenges = data.challenges.map(c => ({
+      ...c,
+      id:           +c.id,
+      expected_usd: c.expected_usd != null ? +c.expected_usd : null,
+      actual_usd:   c.actual_usd   != null ? +c.actual_usd   : null,
+      actual_inr:   c.actual_inr   != null ? +c.actual_inr   : null,
+    }));
     delete pendingClears[recordId];
     rerenderSection(recordId);
     showToast('Sources restored!');
@@ -480,15 +489,15 @@ function openModal() {
   const picker  = document.getElementById('date-picker');
   const err     = document.getElementById('modal-error');
   overlay.classList.remove('hidden');
-  // Use LOCAL date — toISOString() is UTC and shows wrong date in IST after midnight
   const now = new Date();
   const y = now.getFullYear();
   const m = String(now.getMonth() + 1).padStart(2, '0');
   const d = String(now.getDate()).padStart(2, '0');
-  picker.value = `${y}-${m}-${d}`;
+  picker.value = `${d}/${m}/${y}`;
   err.classList.add('hidden');
   err.textContent = '';
   picker.focus();
+  picker.select();
 }
 function closeModal() {
   document.getElementById('modal-overlay').classList.add('hidden');
@@ -498,8 +507,19 @@ function closeModal() {
 async function addDate() {
   const picker = document.getElementById('date-picker');
   const err    = document.getElementById('modal-error');
-  const date   = picker.value;
-  if (!date) { err.textContent = 'Please select a date.'; err.classList.remove('hidden'); return; }
+  const raw    = picker.value.trim();
+  if (!raw) { err.textContent = 'Please enter a date.'; err.classList.remove('hidden'); return; }
+  const parts = raw.split('/');
+  if (parts.length !== 3 || parts[0].length !== 2 || parts[1].length !== 2 || parts[2].length !== 4) {
+    err.textContent = 'Use DD/MM/YYYY format (e.g. 15/03/2026).';
+    err.classList.remove('hidden'); return;
+  }
+  const [dd, mm, yyyy] = parts.map(Number);
+  const testDate = new Date(yyyy, mm - 1, dd);
+  if (testDate.getFullYear() !== yyyy || testDate.getMonth() !== mm - 1 || testDate.getDate() !== dd) {
+    err.textContent = 'Invalid date.'; err.classList.remove('hidden'); return;
+  }
+  const date = `${yyyy}-${String(mm).padStart(2,'0')}-${String(dd).padStart(2,'0')}`;
   try {
     const record = await api('POST', '/api/records', { date });
     record.id   = +record.id;
@@ -913,10 +933,15 @@ async function init() {
     const data = await api('GET', '/api/data');
     state.settings = data.settings;
     state.records  = data.records;
-    // Normalize IDs to numbers so === comparisons always work
+    // Normalize IDs and numeric fields so arithmetic never produces NaN
     state.records.forEach(r => {
       r.id = +r.id;
-      r.challenges.forEach(c => { c.id = +c.id; });
+      r.challenges.forEach(c => {
+        c.id           = +c.id;
+        c.expected_usd = c.expected_usd != null ? +c.expected_usd : null;
+        c.actual_usd   = c.actual_usd   != null ? +c.actual_usd   : null;
+        c.actual_inr   = c.actual_inr   != null ? +c.actual_inr   : null;
+      });
     });
 
     document.getElementById('usd-rate-input').value = state.settings.usd_rate ?? 92.54;

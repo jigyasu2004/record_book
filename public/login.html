@@ -327,8 +327,8 @@
 
     /* ── Check already logged in ── */
     fetch('/api/auth/me')
-      .then(r => r.json())
-      .then(data => { if (data.user) window.location.replace('/'); })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data && data.user) window.location.replace('/'); })
       .catch(() => {});
 
     /* ── Login ── */
