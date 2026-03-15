@@ -340,8 +340,18 @@ app.put('/api/settings/:key', requireAuth, async (req, res) => {
 });
 
 /* ── Start ───────────────────────────────────────────────────────── */
-initDB()
-  .then(() => app.listen(PORT, () =>
-    console.log(`\n  Earnings Record Book  →  http://localhost:${PORT}\n`)
-  ))
-  .catch(err => { console.error('DB init failed:', err); process.exit(1); });
+const dbReady = initDB();
+
+if (require.main === module) {
+  // Local development — start the HTTP server
+  dbReady
+    .then(() => app.listen(PORT, () =>
+      console.log(`\n  Earnings Record Book  →  http://localhost:${PORT}\n`)
+    ))
+    .catch(err => { console.error('DB init failed:', err); process.exit(1); });
+} else {
+  // Vercel serverless — DB is initialised when the module first loads
+  dbReady.catch(err => console.error('DB init failed:', err));
+}
+
+module.exports = app;
